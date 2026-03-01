@@ -1,0 +1,20 @@
+interface xyz.openbmc_project.Calculator
+
+type State (
+  lastResult: int,
+  status: string,
+  base: string,
+  owner: string,
+  objectPath: string,
+  serviceName: string
+)
+
+method Multiply(x: int, y: ?int) -> (z: int)
+method Divide(x: int, y: ?int) -> (z: int)
+method Express() -> (z: string)
+method Clear() -> ()
+method GetState() -> (state: State)
+method SetOwner(owner: string) -> ()
+
+error DivisionByZero ()
+error PermissionDenied ()

@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Go
+go/build/
+
+# C++
+cpp/build/
+
+# Rust
+rust/target/
+
+# Runtime sockets / temp artifacts
+*.sock
+*.log
+
+# Archives
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
