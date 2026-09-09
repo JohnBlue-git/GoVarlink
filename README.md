@@ -1,12 +1,68 @@
-## GoVarlink - xyz.openbmc_project.Calculator
+## GoVarlink - D-Bus vs Varlink, Compared Across Languages
+
+### Project Goal
+
+This project compares **D-Bus** and **Varlink** as IPC mechanisms, and compares how that architectural difference plays out across multiple language runtimes. The same small calculator service is implemented on Varlink in four languages - C++20, Go, Python, and Rust - benchmarked against each other, and against a reference D-Bus implementation, to see how transport architecture and language choice each affect throughput, latency, and memory footprint.
+
+### D-Bus vs Varlink at a Glance
+
+D-Bus routes every call through a central broker/daemon. Varlink, as used in this project, talks directly over a UNIX socket between client and service, with no broker hop.
+
+```text
+D-Bus (broker design)
+
+┌────────┐                ┌────────┐                ┌─────────┐
+│ Client │─── request ───▶│ Broker │─── forward ───▶│ Service │
+│        │◀─── reply ─────│ Daemon │◀─── reply ─────│         │
+└────────┘                └────────┘                └─────────┘
+
+Varlink (direct socket design)
+
+┌────────┐                                          ┌─────────┐
+│ Client │────────────── UNIX socket ──────────────▶│ Service │
+│        │◀─────────────────────────────────────────│         │
+└────────┘                                          └─────────┘
+```
+
+![alt text](Flow.png)
+
+D-Bus flow:
+
+1. Client marshals request.
+2. Client sends request to broker.
+3. Broker routes request to destination service.
+4. Service handles request and returns reply to broker.
+5. Broker routes reply back to client.
+
+Varlink flow:
+
+1. Client serializes request.
+2. Client writes directly to service UNIX socket.
+3. Service handles request and writes reply directly back.
+
+Why Varlink is often faster in this kind of benchmark:
+
+- Leaner request/response path: Varlink is designed around a simple RPC model, so the call path is usually shorter.
+- Broker vs direct socket path: the broker hop in D-Bus can introduce extra context switches and extra data movement/copy steps in the message path, while this Varlink sample uses direct UNIX socket client<->server communication.
+- Lower protocol/stack overhead: D-Bus commonly involves richer semantics and extra framework layers, which can add per-call cost.
+- Serialization cost profile: in this workload (small calculator RPC), lightweight JSON message handling can be cheaper than a more feature-rich bus stack.
+- Service model difference: bus-oriented architectures provide routing/introspection/features that are valuable, but those features are not free in latency/throughput.
+
+Important caveat: these numbers are workload-specific and implementation-specific. A fair Varlink vs D-Bus conclusion should keep hardware, compiler flags, iteration count, and request shape identical.
+
+See [section 6](#6-benchmark--test-usage-pytest--fixtures) for the actual measured D-Bus vs Varlink numbers, and for the across-language comparison.
+
+---
+
+## What's Implemented
 
 This repository generates a Varlink-based calculator service from the OpenBMC-style interface definition:
 
 - Service: `xyz.openbmc_project.Calculator`
 - Object path: `/xyz/openbmc_project/calculator`
 - Source interface files:
-	- `xyz/openbmc_project/Calculator.interface.yaml`
-	- `xyz/openbmc_project/Calculator.events.yaml`
+	- `source/xyz/openbmc_project/Calculator.interface.yaml`
+	- `source/xyz/openbmc_project/Calculator.events.yaml`
 
 Implemented runtimes:
 
@@ -25,7 +81,7 @@ Implemented runtimes:
 
 Varlink IDL is generated at:
 
-- `varlink/xyz.openbmc_project.Calculator.varlink`
+- `source/varlink/xyz.openbmc_project.Calculator.varlink`
 
 Mapped methods:
 
@@ -47,30 +103,31 @@ OpenBMC property handling:
 
 ```text
 .
-├── cpp/
-│   ├── Makefile
-│   ├── server.cpp
-│   └── client.cpp
-├── go/
-│   ├── go.mod
-│   ├── server/main.go
-│   └── client/main.go
-├── python/
-│   ├── server.py
-│   └── client.py
-├── rust/
-│   ├── Cargo.toml
-│   └── src/bin/
-│       ├── server.rs
-│       └── client.rs
-├── test/
-│   └── benchmark_compare.py
-├── varlink/
-│   └── xyz.openbmc_project.Calculator.varlink
-└── xyz/
-		└── openbmc_project/
-				├── Calculator.interface.yaml
-				└── Calculator.events.yaml
+├── source/
+│   ├── cpp/
+│   │   ├── Makefile
+│   │   ├── server.cpp
+│   │   └── client.cpp
+│   ├── go/
+│   │   ├── go.mod
+│   │   ├── server/main.go
+│   │   └── client/main.go
+│   ├── python/
+│   │   ├── server.py
+│   │   └── client.py
+│   ├── rust/
+│   │   ├── Cargo.toml
+│   │   └── src/bin/
+│   │       ├── server.rs
+│   │       └── client.rs
+│   ├── varlink/
+│   │   └── xyz.openbmc_project.Calculator.varlink
+│   └── xyz/
+│       └── openbmc_project/
+│           ├── Calculator.interface.yaml
+│           └── Calculator.events.yaml
+└── test/
+    └── benchmark_compare.py
 ```
 
 ---
@@ -87,7 +144,7 @@ python3 -m pip install -U pytest
 
 Rust build requirement:
 
-- To build `rust/` binaries, a working Rust toolchain (`cargo` + `rustc`) is required.
+- To build `source/rust/` binaries, a working Rust toolchain (`cargo` + `rustc`) is required.
 
 Option A (have sudo/root): install Rust from apt
 
@@ -122,13 +179,13 @@ $HOME/.cargo/bin/rustup run stable rustc --version
 Start server:
 
 ```bash
-python3 python/server.py --socket /tmp/calculator-python.sock
+python3 source/python/server.py --socket /tmp/calculator-python.sock
 ```
 
 Call method:
 
 ```bash
-python3 python/client.py --socket /tmp/calculator-python.sock --method Multiply --x 7 --y 3
+python3 source/python/client.py --socket /tmp/calculator-python.sock --method Multiply --x 7 --y 3
 ```
 
 ### 4.2 Go (async style by goroutines/channels)
@@ -136,23 +193,23 @@ python3 python/client.py --socket /tmp/calculator-python.sock --method Multiply 
 Build:
 
 ```bash
-cd go
+cd source/go
 mkdir -p build
 go build -o ./build/go-server ./server
 go build -o ./build/go-client ./client
-cd ..
+cd ../..
 ```
 
 Start server:
 
 ```bash
-./go/build/go-server --socket /tmp/calculator-go.sock
+./source/go/build/go-server --socket /tmp/calculator-go.sock
 ```
 
 Call method:
 
 ```bash
-./go/build/go-client --socket /tmp/calculator-go.sock --method Multiply --x 7 --y 3
+./source/go/build/go-client --socket /tmp/calculator-go.sock --method Multiply --x 7 --y 3
 ```
 
 ### 4.3 C++20 (coroutine style)
@@ -160,19 +217,19 @@ Call method:
 Build:
 
 ```bash
-make -C cpp
+make -C source/cpp
 ```
 
 Start server:
 
 ```bash
-./cpp/build/calculator_server --socket /tmp/calculator-cpp.sock
+./source/cpp/build/calculator_server --socket /tmp/calculator-cpp.sock
 ```
 
 Call method:
 
 ```bash
-./cpp/build/calculator_client --socket /tmp/calculator-cpp.sock --method Multiply --x 7 --y 3
+./source/cpp/build/calculator_client --socket /tmp/calculator-cpp.sock --method Multiply --x 7 --y 3
 ```
 
 ### 4.4 Rust (tokio async/await)
@@ -180,29 +237,29 @@ Call method:
 Build:
 
 ```bash
-cd rust
+cd source/rust
 cargo build --release
-cd ..
+cd ../..
 ```
 
 If `cargo` is not in PATH (rustup user install), use:
 
 ```bash
-cd rust
+cd source/rust
 $HOME/.cargo/bin/rustup run stable cargo build --release
-cd ..
+cd ../..
 ```
 
 Start server:
 
 ```bash
-./rust/target/release/calculator_server --socket /tmp/calculator-rust.sock
+./source/rust/target/release/calculator_server --socket /tmp/calculator-rust.sock
 ```
 
 Call method:
 
 ```bash
-./rust/target/release/calculator_client --socket /tmp/calculator-rust.sock --method Multiply --x 7 --y 3
+./source/rust/target/release/calculator_client --socket /tmp/calculator-rust.sock --method Multiply --x 7 --y 3
 ```
 
 ---
@@ -262,7 +319,7 @@ Method naming format:
 Example with Go server:
 
 ```bash
-./go/build/go-server --socket /tmp/calculator-go.sock
+./source/go/build/go-server --socket /tmp/calculator-go.sock
 ```
 
 In another terminal, inspect service with `varlinkctl`:
@@ -286,7 +343,7 @@ varlinkctl --no-pager call unix:/tmp/calculator-go.sock xyz.openbmc_project.Calc
 Set owner example (requires permission env in server process):
 
 ```bash
-CALCULATOR_ALLOW_OWNER_CHANGE=1 ./go/build/go-server --socket /tmp/calculator-go.sock
+CALCULATOR_ALLOW_OWNER_CHANGE=1 ./source/go/build/go-server --socket /tmp/calculator-go.sock
 varlinkctl --no-pager call unix:/tmp/calculator-go.sock xyz.openbmc_project.Calculator.SetOwner '{"owner":"admin"}'
 ```
 
@@ -340,9 +397,9 @@ Cleanup behavior:
 
 
 - If `BENCHMARK_CLEANUP=1`, full cleanup runs:
-	- remove `go/build/go-*` and remove `go/build/` if empty
-	- run `make clean` under `cpp/`
-	- run `cargo clean` under `rust/`
+	- remove `source/go/build/go-*` and remove `source/go/build/` if empty
+	- run `make clean` under `source/cpp/`
+	- run `cargo clean` under `source/rust/`
 
 Run only one runtime case (example: Go):
 
@@ -389,49 +446,7 @@ Source: https://github.com/JohnBlue-git/HowToSDBusPlus/blob/main/my-calculator/R
 
 ### 6.5 Comparison: Varlink vs D-Bus
 
-Why Varlink is often faster in this kind of benchmark:
-
-- Leaner request/response path: Varlink is designed around a simple RPC model, so the call path is usually shorter.
-- Broker vs direct socket path:
-    - D-Bus typically uses a broker/daemon routing model, while this Varlink sample uses direct UNIX socket client↔server communication.
-	- The broker hop can introduce extra context switches and extra data movement/copy steps in the message path.
-- Lower protocol/stack overhead: D-Bus commonly involves richer semantics and extra framework layers, which can add per-call cost.
-- Serialization cost profile: in this workload (small calculator RPC), lightweight JSON message handling can be cheaper than a more feature-rich bus stack.
-- Service model difference: bus-oriented architectures provide routing/introspection/features that are valuable, but those features are not free in latency/throughput.
-
-Call flow (high level):
-
-```text
-D-Bus (broker design)
-Client Process
-	-> D-Bus Broker/Daemon
-			-> Service Process
-			<- D-Bus Broker/Daemon
-	<- Client Process
-
-Varlink (direct socket design)
-Client Process
-	-> Service Process (UNIX socket)
-	<- Service Process
-```
-
-Per-request flow detail:
-
-- D-Bus flow:
-	1. Client marshals request.
-	2. Client sends request to broker.
-	3. Broker routes request to destination service.
-	4. Service handles request and returns reply to broker.
-	5. Broker routes reply back to client.
-- Varlink flow:
-	1. Client serializes request.
-	2. Client writes directly to service UNIX socket.
-	3. Service handles request and writes reply directly back.
-
-Important caveat:
-
-- These numbers are workload-specific and implementation-specific.
-- A fair Varlink vs D-Bus conclusion should keep hardware, compiler flags, iteration count, and request shape identical.
+See [D-Bus vs Varlink at a Glance](#d-bus-vs-varlink-at-a-glance) at the top of this document for the architectural comparison (call flow, why Varlink is often faster, and caveats). This section covers the measured numbers.
 
 Based on the latest `BENCHMARK_ITERATIONS=20000` sample (same metric format):
 

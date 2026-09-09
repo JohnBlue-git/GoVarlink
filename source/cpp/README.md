@@ -33,13 +33,13 @@ Key variables:
 Build commands:
 
 ```bash
-make -C cpp
+make -C source/cpp
 ```
 
 Clean commands:
 
 ```bash
-make -C cpp clean
+make -C source/cpp clean
 ```
 
 ---

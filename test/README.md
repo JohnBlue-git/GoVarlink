@@ -128,8 +128,8 @@ During `pytest -q -s test/benchmark_compare.py`, execution flow is:
 
 - Prepares runtime availability map.
 - Build behavior:
-  - Go: uses `go build` into `go/build/`
-  - C++: uses `make -C cpp`
+  - Go: uses `go build` into `source/go/build/`
+  - C++: uses `make -C source/cpp`
   - Rust: uses `cargo build --release` (or rustup stable cargo)
 - Stores `{available: bool, reason: str}` per runtime.
 
@@ -185,7 +185,7 @@ Inside `test_benchmark_runtime`:
 
 - `BENCHMARK_CLEANUP`
   - When set to `1`, cleanup runs after session:
-    - removes `go/build/go-server`, `go/build/go-client`
-    - removes `go/build/` if empty
-    - runs `make clean` under `cpp/`
-    - runs `cargo clean` under `rust/` (when cargo is available)
+    - removes `source/go/build/go-server`, `source/go/build/go-client`
+    - removes `source/go/build/` if empty
+    - runs `make clean` under `source/cpp/`
+    - runs `cargo clean` under `source/rust/` (when cargo is available)

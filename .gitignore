@@ -4,13 +4,13 @@ __pycache__/
 .pytest_cache/
 
 # Go
-go/build/
+source/go/build/
 
 # C++
-cpp/build/
+source/cpp/build/
 
 # Rust
-rust/target/
+source/rust/target/
 
 # Runtime sockets / temp artifacts
 *.sock

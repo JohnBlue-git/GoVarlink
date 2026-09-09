@@ -104,21 +104,21 @@ def rust_cargo_cmd() -> list[str] | None:
 
 
 def prepare_go_binaries() -> None:
-    go_build_dir = ROOT / "go/build"
+    go_build_dir = ROOT / "source/go/build"
     go_build_dir.mkdir(parents=True, exist_ok=True)
-    run_cmd(["go", "build", "-o", str(go_build_dir / "go-server"), "./server"], cwd=ROOT / "go")
-    run_cmd(["go", "build", "-o", str(go_build_dir / "go-client"), "./client"], cwd=ROOT / "go")
+    run_cmd(["go", "build", "-o", str(go_build_dir / "go-server"), "./server"], cwd=ROOT / "source/go")
+    run_cmd(["go", "build", "-o", str(go_build_dir / "go-client"), "./client"], cwd=ROOT / "source/go")
 
 
 def prepare_cpp_binaries() -> None:
-    run_cmd(["make", "-C", str(ROOT / "cpp")])
+    run_cmd(["make", "-C", str(ROOT / "source/cpp")])
 
 
 def prepare_rust_binaries() -> None:
     cargo_cmd = rust_cargo_cmd()
     if cargo_cmd is None:
         raise RuntimeError("Rust cargo command not available")
-    run_cmd([*cargo_cmd, "build", "--release"], cwd=ROOT / "rust")
+    run_cmd([*cargo_cmd, "build", "--release"], cwd=ROOT / "source/rust")
 
 
 def resolve_iterations() -> int:
@@ -136,14 +136,14 @@ def cleanup_enabled() -> bool:
 
 def cleanup_build_artifacts(*, clean_go: bool, clean_cpp: bool, clean_rust: bool) -> None:
     if clean_go:
-        for path in [ROOT / "go/build/go-server", ROOT / "go/build/go-client"]:
+        for path in [ROOT / "source/go/build/go-server", ROOT / "source/go/build/go-client"]:
             try:
                 if path.exists():
                     path.unlink()
             except OSError:
                 pass
 
-        go_build_dir = ROOT / "go/build"
+        go_build_dir = ROOT / "source/go/build"
         try:
             if go_build_dir.exists() and not any(go_build_dir.iterdir()):
                 go_build_dir.rmdir()
@@ -151,20 +151,20 @@ def cleanup_build_artifacts(*, clean_go: bool, clean_cpp: bool, clean_rust: bool
             pass
 
     if clean_cpp:
-        cpp_build = ROOT / "cpp/build"
+        cpp_build = ROOT / "source/cpp/build"
         if cpp_build.exists():
             try:
-                run_cmd(["make", "-C", str(ROOT / "cpp"), "clean"])
+                run_cmd(["make", "-C", str(ROOT / "source/cpp"), "clean"])
             except subprocess.CalledProcessError:
                 pass
 
     if clean_rust:
-        rust_target = ROOT / "rust/target"
+        rust_target = ROOT / "source/rust/target"
         if rust_target.exists():
             cargo_cmd = rust_cargo_cmd()
             if cargo_cmd is not None:
                 try:
-                    run_cmd([*cargo_cmd, "clean"], cwd=ROOT / "rust")
+                    run_cmd([*cargo_cmd, "clean"], cwd=ROOT / "source/rust")
                 except subprocess.CalledProcessError:
                     pass
 
@@ -222,7 +222,7 @@ def cleanup_generated_artifacts(runtime_availability: dict[str, dict[str, Any]])
 
 @pytest.fixture(scope="session")
 def runtime_availability() -> dict[str, dict[str, Any]]:
-    (ROOT / "go/build").mkdir(parents=True, exist_ok=True)
+    (ROOT / "source/go/build").mkdir(parents=True, exist_ok=True)
 
     availability: dict[str, dict[str, Any]] = {
         "python": {"available": True, "reason": ""},
@@ -231,8 +231,8 @@ def runtime_availability() -> dict[str, dict[str, Any]]:
         "rust": {"available": False, "reason": ""},
     }
 
-    go_server = ROOT / "go/build/go-server"
-    go_client = ROOT / "go/build/go-client"
+    go_server = ROOT / "source/go/build/go-server"
+    go_client = ROOT / "source/go/build/go-client"
     if go_server.exists() and go_client.exists():
         availability["go"] = {"available": True, "reason": ""}
     elif command_exists("go"):
@@ -250,8 +250,8 @@ def runtime_availability() -> dict[str, dict[str, Any]]:
             "reason": "go not found in PATH",
         }
 
-    cpp_server = ROOT / "cpp/build/calculator_server"
-    cpp_client = ROOT / "cpp/build/calculator_client"
+    cpp_server = ROOT / "source/cpp/build/calculator_server"
+    cpp_client = ROOT / "source/cpp/build/calculator_client"
     if cpp_server.exists() and cpp_client.exists():
         availability["cpp"] = {"available": True, "reason": ""}
     elif command_exists("make") and command_exists("g++"):
@@ -269,8 +269,8 @@ def runtime_availability() -> dict[str, dict[str, Any]]:
             "reason": "make and/or g++ not found in PATH",
         }
 
-    rust_server = ROOT / "rust/target/release/calculator_server"
-    rust_client = ROOT / "rust/target/release/calculator_client"
+    rust_server = ROOT / "source/rust/target/release/calculator_server"
+    rust_client = ROOT / "source/rust/target/release/calculator_client"
     cargo_cmd = rust_cargo_cmd()
     if rust_server.exists() and rust_client.exists() and cargo_cmd is not None:
         availability["rust"] = {"available": True, "reason": ""}
@@ -323,9 +323,9 @@ def runtime_cases() -> list[RuntimeCase]:
         RuntimeCase(
             name="go",
             socket_path=go_socket,
-            server_cmd=[str(ROOT / "go/build/go-server"), "--socket", str(go_socket)],
+            server_cmd=[str(ROOT / "source/go/build/go-server"), "--socket", str(go_socket)],
             client_cmd_base=[
-                str(ROOT / "go/build/go-client"),
+                str(ROOT / "source/go/build/go-client"),
                 "--socket",
                 str(go_socket),
                 "--method",
@@ -339,10 +339,10 @@ def runtime_cases() -> list[RuntimeCase]:
         RuntimeCase(
             name="python",
             socket_path=py_socket,
-            server_cmd=["python3", str(ROOT / "python/server.py"), "--socket", str(py_socket)],
+            server_cmd=["python3", str(ROOT / "source/python/server.py"), "--socket", str(py_socket)],
             client_cmd_base=[
                 "python3",
-                str(ROOT / "python/client.py"),
+                str(ROOT / "source/python/client.py"),
                 "--socket",
                 str(py_socket),
                 "--method",
@@ -356,9 +356,9 @@ def runtime_cases() -> list[RuntimeCase]:
         RuntimeCase(
             name="cpp",
             socket_path=cpp_socket,
-            server_cmd=[str(ROOT / "cpp/build/calculator_server"), "--socket", str(cpp_socket)],
+            server_cmd=[str(ROOT / "source/cpp/build/calculator_server"), "--socket", str(cpp_socket)],
             client_cmd_base=[
-                str(ROOT / "cpp/build/calculator_client"),
+                str(ROOT / "source/cpp/build/calculator_client"),
                 "--socket",
                 str(cpp_socket),
                 "--method",
@@ -372,9 +372,9 @@ def runtime_cases() -> list[RuntimeCase]:
         RuntimeCase(
             name="rust",
             socket_path=rust_socket,
-            server_cmd=[str(ROOT / "rust/target/release/calculator_server"), "--socket", str(rust_socket)],
+            server_cmd=[str(ROOT / "source/rust/target/release/calculator_server"), "--socket", str(rust_socket)],
             client_cmd_base=[
-                str(ROOT / "rust/target/release/calculator_client"),
+                str(ROOT / "source/rust/target/release/calculator_client"),
                 "--socket",
                 str(rust_socket),
                 "--method",
